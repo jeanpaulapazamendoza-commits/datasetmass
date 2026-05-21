@@ -35,20 +35,65 @@ CODIGO_ISIL = "ISIL 76274929@mail.isil.pe"
 URL_COLAB = "https://colab.research.google.com/drive/1HRFy03Da-KP6zSfyX6XSwvqeqqeaDUPP?usp=sharing"
 
 # ===========================================================
-# CARGA DEL DATASET Y MODELOS
+# CARGAR MODELOS (siempre)
 # ===========================================================
-@st.cache_data
-def cargar_datos():
-    df = pd.read_excel("Dataset.xlsx", sheet_name="df")
-    return df
+try:
+    kmeans_pretrained, knn_pretrained, scaler = cargar_modelos()
+except Exception as e:
+    st.error(f"Error al cargar los modelos: {type(e).__name__}: {e}")
+    st.stop()
 
-@st.cache_resource
-def cargar_modelos():
-    kmeans = joblib.load("modelos/modelo_kmeans.pkl")
-    knn = joblib.load("modelos/modelo_knn.pkl")
-    scaler = joblib.load("modelos/scaler.pkl")
-    return kmeans, knn, scaler
+# ===========================================================
+# UPLOADER DE DATASET (NUEVA FUNCIONALIDAD)
+# ===========================================================
+st.sidebar.header("📂 Cargar tu propio dataset")
+st.sidebar.caption("Sube un archivo Excel o CSV con las columnas: codigo_sucursal, name_sucursal, distrito, latitud, longitud")
 
+archivo_subido = st.sidebar.file_uploader(
+    "Selecciona un archivo",
+    type=["xlsx", "xls", "csv"],
+    help="El archivo debe tener al menos las columnas 'latitud' y 'longitud'."
+)
+
+# Decidir qué dataset usar
+if archivo_subido is not None:
+    try:
+        if archivo_subido.name.endswith(".csv"):
+            df = pd.read_csv(archivo_subido)
+        else:
+            df = pd.read_excel(archivo_subido)
+
+        # Validar columnas requeridas
+        columnas_requeridas = {"latitud", "longitud"}
+        if not columnas_requeridas.issubset(df.columns):
+            st.sidebar.error(f"⚠️ Falta columnas. El archivo debe tener: {columnas_requeridas}")
+            st.stop()
+
+        # Rellenar columnas opcionales si no existen
+        if "codigo_sucursal" not in df.columns:
+            df["codigo_sucursal"] = range(1, len(df) + 1)
+        if "name_sucursal" not in df.columns:
+            df["name_sucursal"] = [f"Tienda {i}" for i in range(1, len(df) + 1)]
+        if "distrito" not in df.columns:
+            df["distrito"] = "Sin especificar"
+
+        # Limpiar nulos en lat/lon
+        df = df.dropna(subset=["latitud", "longitud"]).reset_index(drop=True)
+
+        st.sidebar.success(f"✅ Archivo cargado: {len(df)} tiendas")
+    except Exception as e:
+        st.sidebar.error(f"Error al leer el archivo: {e}")
+        st.stop()
+else:
+    # Usar dataset por defecto
+    try:
+        df = cargar_datos()
+        st.sidebar.info(f"ℹ️ Usando dataset por defecto ({len(df)} tiendas)")
+    except Exception as e:
+        st.sidebar.error(f"Error al cargar el dataset por defecto: {e}")
+        st.stop()
+
+st.sidebar.markdown("---")
 # ===========================================================
 # HEADER
 # ===========================================================
