@@ -5,3 +5,5 @@ scikit-learn
 joblib
 plotly
 openpyxl
+scipy
+openrouteservice
