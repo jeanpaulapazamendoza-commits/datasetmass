@@ -48,6 +48,36 @@ def cargar_modelos():
     return kmeans, knn, scaler
 
 # ===========================================================
+# FUNCIÓN: GENERAR PLANTILLA EXCEL DE EJEMPLO
+# ===========================================================
+@st.cache_data
+def generar_plantilla_excel():
+    """Genera una plantilla Excel con las columnas correctas y filas de ejemplo."""
+    plantilla = pd.DataFrame({
+        "codigo_sucursal": [101, 102, 103],
+        "name_sucursal": ["Tienda Centro Lima", "Tienda Miraflores", "Tienda San Isidro"],
+        "distrito": ["Lima", "Miraflores", "San Isidro"],
+        "latitud": [-12.046374, -12.119860, -12.097980],
+        "longitud": [-77.042793, -77.029350, -77.036430]
+    })
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        plantilla.to_excel(writer, index=False, sheet_name='df')
+    return buffer.getvalue()
+
+@st.cache_data
+def generar_plantilla_csv():
+    """Genera una plantilla CSV con las columnas correctas y filas de ejemplo."""
+    plantilla = pd.DataFrame({
+        "codigo_sucursal": [101, 102, 103],
+        "name_sucursal": ["Tienda Centro Lima", "Tienda Miraflores", "Tienda San Isidro"],
+        "distrito": ["Lima", "Miraflores", "San Isidro"],
+        "latitud": [-12.046374, -12.119860, -12.097980],
+        "longitud": [-77.042793, -77.029350, -77.036430]
+    })
+    return plantilla.to_csv(index=False).encode("utf-8")
+
+# ===========================================================
 # CARGAR MODELOS (siempre)
 # ===========================================================
 try:
@@ -57,10 +87,46 @@ except Exception as e:
     st.stop()
 
 # ===========================================================
-# UPLOADER DE DATASET (NUEVA FUNCIONALIDAD)
+# SIDEBAR — DESCARGAR PLANTILLA Y SUBIR ARCHIVO
 # ===========================================================
 st.sidebar.header("📂 Cargar tu propio dataset")
-st.sidebar.caption("Sube un archivo Excel o CSV con las columnas: codigo_sucursal, name_sucursal, distrito, latitud, longitud")
+
+# Sub-sección: descargar plantilla
+with st.sidebar.expander("📥 ¿No sabes cómo llenar los datos? Descarga la plantilla", expanded=False):
+    st.caption("Descarga una plantilla con las columnas correctas y 3 filas de ejemplo. Edítala con tus propios datos y luego súbela abajo.")
+
+    st.markdown("**Columnas requeridas:**")
+    st.markdown("""
+    | Columna | Tipo | Ejemplo |
+    |---|---|---|
+    | codigo_sucursal | número | 101 |
+    | name_sucursal | texto | Tienda Centro Lima |
+    | distrito | texto | Lima |
+    | **latitud** ⭐ | decimal | -12.046374 |
+    | **longitud** ⭐ | decimal | -77.042793 |
+    """)
+    st.caption("⭐ Solo latitud y longitud son obligatorias. Las otras son opcionales.")
+
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        st.download_button(
+            label="📊 Excel",
+            data=generar_plantilla_excel(),
+            file_name="plantilla_tiendas.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+    with col_p2:
+        st.download_button(
+            label="📄 CSV",
+            data=generar_plantilla_csv(),
+            file_name="plantilla_tiendas.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
+# Sub-sección: subir archivo
+st.sidebar.caption("Sube un archivo Excel o CSV con tus tiendas:")
 
 archivo_subido = st.sidebar.file_uploader(
     "Selecciona un archivo",
@@ -78,7 +144,7 @@ if archivo_subido is not None:
 
         columnas_requeridas = {"latitud", "longitud"}
         if not columnas_requeridas.issubset(df.columns):
-            st.sidebar.error(f"⚠️ Faltan columnas. El archivo debe tener: {columnas_requeridas}")
+            st.sidebar.error(f"⚠️ Faltan columnas. El archivo debe tener al menos: {columnas_requeridas}")
             st.stop()
 
         if "codigo_sucursal" not in df.columns:
@@ -89,6 +155,11 @@ if archivo_subido is not None:
             df["distrito"] = "Sin especificar"
 
         df = df.dropna(subset=["latitud", "longitud"]).reset_index(drop=True)
+
+        if len(df) < 2:
+            st.sidebar.error("⚠️ El archivo debe tener al menos 2 tiendas válidas.")
+            st.stop()
+
         st.sidebar.success(f"✅ Archivo cargado: {len(df)} tiendas")
     except Exception as e:
         st.sidebar.error(f"Error al leer el archivo: {e}")
@@ -127,18 +198,17 @@ with st.expander("📋 Descripción del problema y modelo", expanded=False):
     - **KMeans** (clustering no supervisado): forma los grupos de tiendas por distancia geográfica.
     - **K-Nearest Neighbors** (clasificador supervisado): predice el cluster de una tienda nueva.
     ### Cómo se usa esta app
-    1. (Opcional) Sube tu propio archivo Excel/CSV en el panel lateral.
+    1. (Opcional) Descarga la plantilla y sube tu propio archivo Excel/CSV en el panel lateral.
     2. Selecciona el número de grupos K que necesitas (o usa el sugerido).
     3. Observa el mapa interactivo con las tiendas coloreadas por cluster.
     4. Descarga el resultado como CSV.
     """)
 
 # ===========================================================
-# SIDEBAR — CONTROLES DEL USUARIO
+# SIDEBAR — CONTROLES DE CLUSTERING
 # ===========================================================
-st.sidebar.header("⚙️ Configuración")
+st.sidebar.header("⚙️ Configuración del modelo")
 
-# Preparar X y scaler
 X = df[["latitud", "longitud"]].values
 
 if archivo_subido is not None:
@@ -150,7 +220,8 @@ else:
 @st.cache_data
 def calcular_k_optimo(_X_scaled, dataset_id):
     sils = {}
-    for k in range(2, 11):
+    max_k = min(11, len(_X_scaled))
+    for k in range(2, max_k):
         km = KMeans(n_clusters=k, random_state=42, n_init=10)
         labels = km.fit_predict(_X_scaled)
         sils[k] = silhouette_score(_X_scaled, labels)
@@ -162,11 +233,12 @@ k_optimo, sil_dict = calcular_k_optimo(X_scaled, dataset_id)
 
 st.sidebar.info(f"💡 **K óptimo sugerido:** {k_optimo}\n\n(Silhouette = {sil_dict[k_optimo]:.3f})")
 
+max_k_slider = min(10, len(df) - 1)
 k_usuario = st.sidebar.slider(
     "Selecciona el número de clusters (K):",
     min_value=2,
-    max_value=10,
-    value=k_optimo,
+    max_value=max_k_slider,
+    value=min(k_optimo, max_k_slider),
     step=1,
     help="K es el número de zonas de despacho en las que quieres agrupar las tiendas."
 )
@@ -248,7 +320,8 @@ if mostrar_codo:
     st.subheader("📈 Selección del K óptimo")
     inercias = []
     silhouettes = []
-    K_range = list(range(2, 11))
+    max_k = min(11, len(df))
+    K_range = list(range(2, max_k))
     for k in K_range:
         km_tmp = KMeans(n_clusters=k, random_state=42, n_init=10)
         labels_tmp = km_tmp.fit_predict(X_scaled)
