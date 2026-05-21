@@ -85,43 +85,21 @@ def hex_to_rgba(hex_color, alpha=0.2):
     return f"rgba(100,100,100,{alpha})"
 
 def calcular_ruta_ors(cd_coord, tiendas_coords, api_key, cerrada=True):
-    """
-    Calcula la ruta óptima usando OpenRouteService.
-    cd_coord: [lon, lat] del CD
-    tiendas_coords: lista de tuplas (lon, lat, indice_original)
-    Retorna: dict con order, geometry (lat/lon), distance_km, duration_min
-    """
     client = ors.Client(key=api_key)
-
     jobs = [optimization.Job(id=int(idx), location=[float(lon), float(lat)])
             for (lon, lat, idx) in tiendas_coords]
-
     if cerrada:
-        vehicle = optimization.Vehicle(
-            id=1, profile='driving-car',
-            start=cd_coord, end=cd_coord
-        )
+        vehicle = optimization.Vehicle(id=1, profile='driving-car', start=cd_coord, end=cd_coord)
     else:
-        vehicle = optimization.Vehicle(
-            id=1, profile='driving-car',
-            start=cd_coord
-        )
-
+        vehicle = optimization.Vehicle(id=1, profile='driving-car', start=cd_coord)
     result = client.optimization(jobs=jobs, vehicles=[vehicle], geometry=True)
-
     if not result.get('routes'):
         return None
-
     route = result['routes'][0]
     decoded = convert.decode_polyline(route['geometry'])
     coords_route = [(lat, lon) for lon, lat in decoded['coordinates']]
-
     steps = route.get('steps', [])
-    orden_visita = []
-    for step in steps:
-        if step.get('type') == 'job':
-            orden_visita.append(step['id'])
-
+    orden_visita = [step['id'] for step in steps if step.get('type') == 'job']
     return {
         'orden': orden_visita,
         'coords_route': coords_route,
@@ -164,10 +142,7 @@ with st.sidebar.expander("📥 Descarga la plantilla", expanded=False):
         st.download_button("📄 CSV", data=generar_plantilla_csv(),
             file_name="plantilla_tiendas.csv", mime="text/csv", use_container_width=True)
 
-archivo_subido = st.sidebar.file_uploader(
-    "Sube un archivo Excel o CSV",
-    type=["xlsx", "xls", "csv"]
-)
+archivo_subido = st.sidebar.file_uploader("Sube un archivo Excel o CSV", type=["xlsx", "xls", "csv"])
 
 if archivo_subido is not None:
     try:
@@ -175,21 +150,18 @@ if archivo_subido is not None:
             df = pd.read_csv(archivo_subido)
         else:
             df = pd.read_excel(archivo_subido)
-
         if not {"latitud", "longitud"}.issubset(df.columns):
-            st.sidebar.error("⚠️ El archivo debe tener al menos las columnas 'latitud' y 'longitud'.")
+            st.sidebar.error("⚠️ Faltan columnas 'latitud' y 'longitud'.")
             st.stop()
-
         if "codigo_sucursal" not in df.columns:
             df["codigo_sucursal"] = range(1, len(df) + 1)
         if "name_sucursal" not in df.columns:
             df["name_sucursal"] = [f"Tienda {i}" for i in range(1, len(df) + 1)]
         if "distrito" not in df.columns:
             df["distrito"] = "Sin especificar"
-
         df = df.dropna(subset=["latitud", "longitud"]).reset_index(drop=True)
         if len(df) < 2:
-            st.sidebar.error("⚠️ El archivo debe tener al menos 2 tiendas válidas.")
+            st.sidebar.error("⚠️ Al menos 2 tiendas válidas.")
             st.stop()
         st.sidebar.success(f"✅ {len(df)} tiendas cargadas")
     except Exception as e:
@@ -218,12 +190,6 @@ with st.expander("📋 Descripción del problema y modelo", expanded=False):
     Optimizar las **rutas de despacho** desde un Centro de Distribución (CD) hacia múltiples tiendas en Lima.
     Primero agrupamos las tiendas por cercanía geográfica con KMeans, y luego, para cada grupo,
     calculamos la **ruta óptima por calles reales** usando OpenRouteService.
-
-    ### Modelos y algoritmos
-    - **KMeans**: forma los grupos de tiendas por distancia geográfica.
-    - **KNN**: predice el cluster de una tienda nueva.
-    - **OpenRouteService (VRP)**: resuelve el Vehicle Routing Problem para encontrar
-      la mejor secuencia de visita considerando avenidas, sentidos y tráfico.
     """)
 
 # ===========================================================
@@ -232,7 +198,6 @@ with st.expander("📋 Descripción del problema y modelo", expanded=False):
 st.sidebar.header("⚙️ Configuración del modelo")
 
 X = df[["latitud", "longitud"]].values
-
 if archivo_subido is not None:
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
@@ -254,11 +219,8 @@ k_optimo, sil_dict = calcular_k_optimo(X_scaled, dataset_id)
 st.sidebar.info(f"💡 **K óptimo sugerido:** {k_optimo}\n\n(Silhouette = {sil_dict[k_optimo]:.3f})")
 
 max_k_slider = min(MAX_K, len(df) - 1)
-k_usuario = st.sidebar.slider(
-    "Selecciona el número de clusters (K):",
-    min_value=2, max_value=max_k_slider,
-    value=min(k_optimo, max_k_slider), step=1
-)
+k_usuario = st.sidebar.slider("Selecciona el número de clusters (K):",
+    min_value=2, max_value=max_k_slider, value=min(k_optimo, max_k_slider), step=1)
 usar_optimo = st.sidebar.checkbox("Usar K óptimo automático", value=False)
 K = k_optimo if usar_optimo else k_usuario
 
@@ -269,31 +231,65 @@ st.sidebar.markdown("---")
 # ===========================================================
 st.sidebar.header("🚛 Centro de Distribución y Ruteo")
 
-cd_lat = st.sidebar.number_input(
-    "Latitud del CD:",
-    value=-12.046374, format="%.6f",
-    help="Latitud del centro desde donde parten los camiones."
-)
-cd_lon = st.sidebar.number_input(
-    "Longitud del CD:",
-    value=-77.042793, format="%.6f",
-    help="Longitud del centro desde donde parten los camiones."
-)
+cd_lat = st.sidebar.number_input("Latitud del CD:", value=-12.046374, format="%.6f")
+cd_lon = st.sidebar.number_input("Longitud del CD:", value=-77.042793, format="%.6f")
 
 tipo_recorrido = st.sidebar.selectbox(
     "Tipo de recorrido:",
     options=["cerrado", "abierto"],
-    format_func=lambda x: "🔁 Cerrado (CD → tiendas → CD)" if x == "cerrado" else "➡️ Abierto (CD → tiendas)",
-    help="Cerrado: regresa al CD al final. Abierto: termina en la última tienda."
+    format_func=lambda x: "🔁 Cerrado (CD → tiendas → CD)" if x == "cerrado" else "➡️ Abierto (CD → tiendas)"
 )
 
 api_key_ors = st.sidebar.text_input(
-    "API Key de OpenRouteService:",
-    type="password",
+    "API Key de OpenRouteService:", type="password",
     help="Obtén tu key gratis en https://openrouteservice.org/dev/#/signup"
 )
 
 calcular_rutas = st.sidebar.button("🚛 Calcular rutas óptimas", use_container_width=True, type="primary")
+
+st.sidebar.markdown("---")
+
+# ===========================================================
+# SIDEBAR — FILTROS DE VISUALIZACIÓN
+# ===========================================================
+st.sidebar.header("🔍 Filtros de visualización")
+
+modo_enfoque = st.sidebar.radio(
+    "Modo de visualización:",
+    options=["todos", "aislar", "solo_rutas"],
+    format_func=lambda x: {
+        "todos": "👁️ Mostrar todo",
+        "aislar": "🎯 Aislar un cluster",
+        "solo_rutas": "🛣️ Solo rutas (sin zonas)"
+    }[x],
+    index=0,
+    help="Aislar: muestra un solo cluster. Solo rutas: oculta los polígonos de cobertura."
+)
+
+if modo_enfoque == "aislar":
+    cluster_aislado = st.sidebar.selectbox(
+        "Cluster a aislar:",
+        options=list(range(K)),
+        format_func=lambda x: f"Cluster {x}"
+    )
+    clusters_visibles = [cluster_aislado]
+else:
+    clusters_visibles = st.sidebar.multiselect(
+        "Clusters visibles:",
+        options=list(range(K)),
+        default=list(range(K)),
+        format_func=lambda x: f"Cluster {x}",
+        help="Deselecciona para ocultar clusters específicos"
+    )
+
+mostrar_zonas_check = st.sidebar.checkbox("Mostrar zonas de cobertura", value=True)
+mostrar_rutas_check = st.sidebar.checkbox("Mostrar rutas calculadas", value=True)
+mostrar_tiendas_check = st.sidebar.checkbox("Mostrar tiendas", value=True)
+mostrar_numeros_orden = st.sidebar.checkbox("Mostrar números de orden", value=True)
+mostrar_centroides = st.sidebar.checkbox("Mostrar centroides", value=True)
+
+# Aplicar lógica del modo
+mostrar_zonas = mostrar_zonas_check and modo_enfoque != "solo_rutas"
 
 st.sidebar.markdown("---")
 
@@ -309,12 +305,10 @@ estilo_mapa = st.sidebar.selectbox(
         "open-street-map": "🗺️ OpenStreetMap",
         "carto-darkmatter": "🌃 Oscuro",
         "white-bg": "⬜ Blanco minimalista"
-    }[x],
-    index=0
+    }[x], index=0
 )
 paleta_colores = st.sidebar.selectbox("Paleta de colores:",
     options=["Vivid", "Bold", "Pastel", "Plotly", "D3", "Light24"], index=0)
-mostrar_zonas = st.sidebar.checkbox("Mostrar zonas de cobertura", value=True)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 Ver detalles")
@@ -333,7 +327,7 @@ df_centroides = pd.DataFrame(centroides, columns=["latitud", "longitud"])
 df_centroides["cluster"] = [f"Centroide {i}" for i in range(K)]
 
 # ===========================================================
-# CÁLCULO DE RUTAS (cuando el usuario presiona el botón)
+# CÁLCULO DE RUTAS
 # ===========================================================
 if "rutas_calculadas" not in st.session_state:
     st.session_state.rutas_calculadas = None
@@ -349,10 +343,8 @@ if calcular_rutas:
             errores = []
             for i in range(K):
                 cluster_data = df[df["cluster"] == str(i)].copy()
-                tiendas_coords = [
-                    (float(row["longitud"]), float(row["latitud"]), idx)
-                    for idx, row in cluster_data.iterrows()
-                ]
+                tiendas_coords = [(float(row["longitud"]), float(row["latitud"]), idx)
+                                  for idx, row in cluster_data.iterrows()]
                 try:
                     resultado = calcular_ruta_ors(
                         cd_coord=[cd_lon, cd_lat],
@@ -364,17 +356,14 @@ if calcular_rutas:
                         rutas[i] = resultado
                 except Exception as e:
                     errores.append(f"Cluster {i}: {e}")
-
             if errores:
                 for err in errores:
                     st.sidebar.error(err)
-
             if rutas:
                 st.session_state.rutas_calculadas = rutas
                 st.session_state.rutas_k_config = config_actual
                 st.sidebar.success(f"✅ {len(rutas)} rutas calculadas")
 
-# Verificar si la configuración actual coincide con las rutas guardadas
 config_actual = f"{K}_{cd_lat}_{cd_lon}_{tipo_recorrido}_{dataset_id}"
 rutas_validas = (
     st.session_state.rutas_calculadas is not None
@@ -390,25 +379,41 @@ col2.metric("Clusters", K)
 col3.metric("Silhouette", f"{silhouette_score(X_scaled, df['cluster']):.3f}")
 col4.metric("Davies-Bouldin", f"{davies_bouldin_score(X_scaled, df['cluster']):.3f}")
 if rutas_validas:
-    total_km = sum(r['distance_km'] for r in st.session_state.rutas_calculadas.values())
-    col5.metric("Km totales rutas", f"{total_km:.1f} km")
+    total_km_visibles = sum(
+        r['distance_km'] for i, r in st.session_state.rutas_calculadas.items()
+        if i in clusters_visibles
+    )
+    col5.metric("Km rutas visibles", f"{total_km_visibles:.1f} km")
 else:
     col5.metric("Km totales rutas", "—")
 
 st.markdown("---")
+
+# Aviso si no hay clusters visibles
+if not clusters_visibles:
+    st.warning("⚠️ No hay clusters seleccionados. Activa al menos uno en el sidebar para ver el mapa.")
 
 # ===========================================================
 # MAPA INTERACTIVO
 # ===========================================================
 st.subheader(f"🗺️ Mapa interactivo — {K} zonas de despacho")
 
-center_lat = df["latitud"].mean()
-center_lon = df["longitud"].mean()
-lat_range = df["latitud"].max() - df["latitud"].min()
-lon_range = df["longitud"].max() - df["longitud"].min()
-max_range = max(lat_range, lon_range, 0.001)
+# Centro y zoom — si hay un solo cluster aislado, centrar ahí
+if modo_enfoque == "aislar" and clusters_visibles:
+    cluster_data_focus = df[df["cluster"] == str(clusters_visibles[0])]
+    center_lat = cluster_data_focus["latitud"].mean()
+    center_lon = cluster_data_focus["longitud"].mean()
+    lat_range = cluster_data_focus["latitud"].max() - cluster_data_focus["latitud"].min()
+    lon_range = cluster_data_focus["longitud"].max() - cluster_data_focus["longitud"].min()
+else:
+    center_lat = df["latitud"].mean()
+    center_lon = df["longitud"].mean()
+    lat_range = df["latitud"].max() - df["latitud"].min()
+    lon_range = df["longitud"].max() - df["longitud"].min()
 
-if max_range < 0.05: zoom_calc = 13
+max_range = max(lat_range, lon_range, 0.001)
+if max_range < 0.02: zoom_calc = 14
+elif max_range < 0.05: zoom_calc = 13
 elif max_range < 0.1: zoom_calc = 12
 elif max_range < 0.3: zoom_calc = 11
 elif max_range < 1: zoom_calc = 9
@@ -428,6 +433,8 @@ fig_mapa = go.Figure()
 # 1) Zonas de cobertura
 if mostrar_zonas:
     for i in range(K):
+        if i not in clusters_visibles:
+            continue
         cluster_data = df[df["cluster"] == str(i)]
         if len(cluster_data) >= 3:
             puntos = cluster_data[["longitud", "latitud"]].values
@@ -446,83 +453,107 @@ if mostrar_zonas:
             except Exception:
                 pass
 
-# 2) Rutas óptimas (si están calculadas)
-if rutas_validas:
+# 2) Rutas óptimas
+if rutas_validas and mostrar_rutas_check:
     for i, ruta in st.session_state.rutas_calculadas.items():
+        if i not in clusters_visibles:
+            continue
         color_cluster = colores[i % len(colores)]
         lats = [c[0] for c in ruta['coords_route']]
         lons = [c[1] for c in ruta['coords_route']]
         fig_mapa.add_trace(go.Scattermapbox(
-            lat=lats, lon=lons,
-            mode="lines",
+            lat=lats, lon=lons, mode="lines",
             line=dict(color=color_cluster, width=4),
-            name=f"Ruta {i}",
-            hoverinfo="skip",
-            showlegend=False
+            name=f"Ruta {i}", hoverinfo="skip", showlegend=False
         ))
 
-# 3) Tiendas con numeración si hay rutas
-for i in range(K):
-    cluster_data = df[df["cluster"] == str(i)].copy()
-    color_cluster = colores[i % len(colores)]
+# 3) Tiendas
+if mostrar_tiendas_check:
+    for i in range(K):
+        if i not in clusters_visibles:
+            continue
+        cluster_data = df[df["cluster"] == str(i)].copy()
+        color_cluster = colores[i % len(colores)]
 
-    if rutas_validas and i in st.session_state.rutas_calculadas:
-        orden = st.session_state.rutas_calculadas[i]['orden']
-        mapa_orden = {idx_global: pos + 1 for pos, idx_global in enumerate(orden)}
-        cluster_data["orden_visita"] = cluster_data.index.map(mapa_orden).fillna(0).astype(int)
-        cluster_data = cluster_data.sort_values("orden_visita")
-        texto_marker = cluster_data["orden_visita"].astype(str)
-    else:
-        cluster_data["orden_visita"] = 0
-        texto_marker = [""] * len(cluster_data)
+        if rutas_validas and i in st.session_state.rutas_calculadas:
+            orden = st.session_state.rutas_calculadas[i]['orden']
+            mapa_orden = {idx_global: pos + 1 for pos, idx_global in enumerate(orden)}
+            cluster_data["orden_visita"] = cluster_data.index.map(mapa_orden).fillna(0).astype(int)
+            cluster_data = cluster_data.sort_values("orden_visita")
+        else:
+            cluster_data["orden_visita"] = 0
 
-    fig_mapa.add_trace(go.Scattermapbox(
-        lat=cluster_data["latitud"], lon=cluster_data["longitud"],
-        mode="markers+text" if rutas_validas else "markers",
-        marker=dict(size=18 if rutas_validas else 12, color=color_cluster, opacity=0.95),
-        text=texto_marker,
-        textfont=dict(size=10, color="white", family="Arial Black"),
-        textposition="middle center",
-        name=f"Cluster {i}",
-        customdata=cluster_data[["name_sucursal", "codigo_sucursal", "distrito", "orden_visita"]].values,
-        hovertemplate=(
-            "<b>%{customdata[0]}</b><br>"
-            "Código: %{customdata[1]}<br>"
-            "Distrito: %{customdata[2]}<br>"
-            "Orden de visita: %{customdata[3]}<br>"
-            "Lat: %{lat:.5f}<br>"
-            "Lon: %{lon:.5f}<extra></extra>"
-        )
-    ))
+        fig_mapa.add_trace(go.Scattermapbox(
+            lat=cluster_data["latitud"], lon=cluster_data["longitud"],
+            mode="markers",
+            marker=dict(size=13, color=color_cluster, opacity=0.95),
+            name=f"Cluster {i}",
+            customdata=cluster_data[["name_sucursal", "codigo_sucursal", "distrito", "orden_visita"]].values,
+            hovertemplate=(
+                "<b>%{customdata[0]}</b><br>"
+                "Código: %{customdata[1]}<br>"
+                "Distrito: %{customdata[2]}<br>"
+                "Orden de visita: %{customdata[3]}<br>"
+                "Lat: %{lat:.5f}<br>"
+                "Lon: %{lon:.5f}<extra></extra>"
+            )
+        ))
+
+# 3b) Capa separada de NÚMEROS DE ORDEN (sutiles)
+if rutas_validas and mostrar_numeros_orden and mostrar_tiendas_check:
+    todas_lats, todas_lons, todos_numeros = [], [], []
+    for i in clusters_visibles:
+        if i in st.session_state.rutas_calculadas:
+            cluster_data = df[df["cluster"] == str(i)]
+            orden = st.session_state.rutas_calculadas[i]['orden']
+            for pos, idx_global in enumerate(orden, start=1):
+                if idx_global in cluster_data.index:
+                    row = cluster_data.loc[idx_global]
+                    todas_lats.append(row["latitud"])
+                    todas_lons.append(row["longitud"])
+                    todos_numeros.append(str(pos))
+    if todas_lats:
+        fig_mapa.add_trace(go.Scattermapbox(
+            lat=todas_lats, lon=todas_lons,
+            mode="text", text=todos_numeros,
+            textfont=dict(size=10, color="#1a1a1a", family="Arial"),
+            textposition="top right",
+            name="Orden", showlegend=False, hoverinfo="skip"
+        ))
 
 # 4) Centroides
-fig_mapa.add_trace(go.Scattermapbox(
-    lat=df_centroides["latitud"], lon=df_centroides["longitud"],
-    mode="markers", marker=dict(size=22, color="#1a1a1a"), hoverinfo="skip", showlegend=False
-))
-fig_mapa.add_trace(go.Scattermapbox(
-    lat=df_centroides["latitud"], lon=df_centroides["longitud"],
-    mode="markers+text",
-    marker=dict(size=18, color="white"),
-    text=[f"C{i}" for i in range(K)],
-    textfont=dict(size=10, color="#1a1a1a", family="Arial Black"),
-    textposition="middle center",
-    name="📍 Centroide",
-    hovertext=[f"<b>Centroide Cluster {i}</b>" for i in range(K)],
-    hoverinfo="text"
-))
+if mostrar_centroides:
+    centroides_visibles = df_centroides.iloc[[i for i in range(K) if i in clusters_visibles]]
+    indices_visibles = [i for i in range(K) if i in clusters_visibles]
+    if len(centroides_visibles) > 0:
+        fig_mapa.add_trace(go.Scattermapbox(
+            lat=centroides_visibles["latitud"], lon=centroides_visibles["longitud"],
+            mode="markers", marker=dict(size=20, color="#1a1a1a"),
+            hoverinfo="skip", showlegend=False
+        ))
+        fig_mapa.add_trace(go.Scattermapbox(
+            lat=centroides_visibles["latitud"], lon=centroides_visibles["longitud"],
+            mode="markers+text",
+            marker=dict(size=16, color="white"),
+            text=[f"C{i}" for i in indices_visibles],
+            textfont=dict(size=9, color="#1a1a1a", family="Arial Black"),
+            textposition="middle center",
+            name="📍 Centroide",
+            hovertext=[f"<b>Centroide Cluster {i}</b>" for i in indices_visibles],
+            hoverinfo="text"
+        ))
 
 # 5) Centro de Distribución (CD) — siempre visible
 fig_mapa.add_trace(go.Scattermapbox(
     lat=[cd_lat], lon=[cd_lon],
-    mode="markers", marker=dict(size=30, color="#000000"), hoverinfo="skip", showlegend=False
+    mode="markers", marker=dict(size=28, color="#000000"),
+    hoverinfo="skip", showlegend=False
 ))
 fig_mapa.add_trace(go.Scattermapbox(
     lat=[cd_lat], lon=[cd_lon],
     mode="markers+text",
-    marker=dict(size=24, color="#FFD700"),
-    text=["🏭"],
-    textfont=dict(size=16),
+    marker=dict(size=22, color="#FFD700"),
+    text=["🏭"], textfont=dict(size=14),
     textposition="middle center",
     name="🏭 Centro de Distribución",
     hovertext=[f"<b>Centro de Distribución</b><br>Lat: {cd_lat:.5f}<br>Lon: {cd_lon:.5f}"],
@@ -544,13 +575,18 @@ fig_mapa.update_layout(
 
 st.plotly_chart(fig_mapa, use_container_width=True)
 
-if rutas_validas:
-    st.caption("💡 🏭 **CD** (dorado) = punto de partida. **Líneas gruesas** = ruta por calles reales. **Números** sobre tiendas = orden de visita.")
+# Caption dinámico según el modo
+if modo_enfoque == "aislar":
+    st.caption(f"🎯 **Modo aislado:** mostrando solo Cluster {clusters_visibles[0]}. Cambia el modo de visualización en el sidebar.")
+elif modo_enfoque == "solo_rutas":
+    st.caption("🛣️ **Modo solo rutas:** zonas de cobertura ocultas para enfocarse en las rutas.")
+elif rutas_validas:
+    st.caption("💡 🏭 CD (dorado) = punto de partida. **Líneas gruesas** = ruta por calles. **Números pequeños** = orden de visita.")
 else:
-    st.caption("💡 Configura tu API Key y haz click en **'Calcular rutas óptimas'** en el sidebar para ver el ruteo por calles reales.")
+    st.caption("💡 Calcula las rutas óptimas desde el sidebar para ver el ruteo por calles reales.")
 
 # ===========================================================
-# DETALLE DE RUTAS (cuando están calculadas)
+# DETALLE DE RUTAS
 # ===========================================================
 if rutas_validas:
     st.markdown("---")
@@ -561,49 +597,49 @@ if rutas_validas:
         cluster_data = df[df["cluster"] == str(i)]
         resumen_rutas.append({
             "Cluster": i,
-            "Tiendas en ruta": len(cluster_data),
+            "Visible": "✅" if i in clusters_visibles else "—",
+            "Tiendas": len(cluster_data),
             "Distancia (km)": round(ruta['distance_km'], 2),
-            "Duración estimada (min)": round(ruta['duration_min'], 1)
+            "Duración (min)": round(ruta['duration_min'], 1)
         })
     df_resumen_rutas = pd.DataFrame(resumen_rutas)
     df_resumen_rutas.loc[len(df_resumen_rutas)] = [
-        "TOTAL",
-        df_resumen_rutas["Tiendas en ruta"].sum(),
+        "TOTAL", "", df_resumen_rutas["Tiendas"].sum(),
         round(df_resumen_rutas["Distancia (km)"].sum(), 2),
-        round(df_resumen_rutas["Duración estimada (min)"].sum(), 1)
+        round(df_resumen_rutas["Duración (min)"].sum(), 1)
     ]
     st.dataframe(df_resumen_rutas, use_container_width=True, hide_index=True)
 
-    # Tablas por cluster con secuencia
-    tabs = st.tabs([f"Cluster {i}" for i in st.session_state.rutas_calculadas.keys()])
-    for tab_idx, (i, ruta) in enumerate(st.session_state.rutas_calculadas.items()):
-        with tabs[tab_idx]:
-            cluster_data = df[df["cluster"] == str(i)].copy()
-            orden = ruta['orden']
-            secuencia = []
-            for pos, idx_global in enumerate(orden, start=1):
-                if idx_global in cluster_data.index:
-                    row = cluster_data.loc[idx_global]
-                    secuencia.append({
-                        "Orden": pos,
-                        "Código": row["codigo_sucursal"],
-                        "Tienda": row["name_sucursal"],
-                        "Distrito": row["distrito"],
-                        "Latitud": round(row["latitud"], 5),
-                        "Longitud": round(row["longitud"], 5)
-                    })
-            df_seq = pd.DataFrame(secuencia)
-            st.markdown(f"**Distancia total:** {ruta['distance_km']:.2f} km — **Duración estimada:** {ruta['duration_min']:.1f} min")
-            st.dataframe(df_seq, use_container_width=True, hide_index=True)
-
-            csv_ruta = df_seq.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label=f"⬇️ Descargar ruta Cluster {i} (CSV)",
-                data=csv_ruta,
-                file_name=f"ruta_cluster_{i}.csv",
-                mime="text/csv",
-                key=f"download_ruta_{i}"
-            )
+    # Tabs solo de clusters visibles
+    rutas_visibles_dict = {i: r for i, r in st.session_state.rutas_calculadas.items()
+                           if i in clusters_visibles}
+    if rutas_visibles_dict:
+        tabs = st.tabs([f"Cluster {i}" for i in rutas_visibles_dict.keys()])
+        for tab_idx, (i, ruta) in enumerate(rutas_visibles_dict.items()):
+            with tabs[tab_idx]:
+                cluster_data = df[df["cluster"] == str(i)].copy()
+                orden = ruta['orden']
+                secuencia = []
+                for pos, idx_global in enumerate(orden, start=1):
+                    if idx_global in cluster_data.index:
+                        row = cluster_data.loc[idx_global]
+                        secuencia.append({
+                            "Orden": pos,
+                            "Código": row["codigo_sucursal"],
+                            "Tienda": row["name_sucursal"],
+                            "Distrito": row["distrito"],
+                            "Latitud": round(row["latitud"], 5),
+                            "Longitud": round(row["longitud"], 5)
+                        })
+                df_seq = pd.DataFrame(secuencia)
+                st.markdown(f"**Distancia:** {ruta['distance_km']:.2f} km — **Duración:** {ruta['duration_min']:.1f} min")
+                st.dataframe(df_seq, use_container_width=True, hide_index=True)
+                csv_ruta = df_seq.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label=f"⬇️ Descargar ruta Cluster {i} (CSV)",
+                    data=csv_ruta, file_name=f"ruta_cluster_{i}.csv",
+                    mime="text/csv", key=f"download_ruta_{i}"
+                )
 
 # ===========================================================
 # TABLA RESUMEN POR CLUSTER
@@ -622,8 +658,7 @@ st.dataframe(resumen, use_container_width=True)
 # ===========================================================
 if mostrar_codo:
     st.subheader("📈 Selección del K óptimo")
-    inercias = []
-    silhouettes = []
+    inercias, silhouettes = [], []
     max_k = min(MAX_K + 1, len(df))
     K_range = list(range(2, max_k))
     for k in K_range:
@@ -635,14 +670,12 @@ if mostrar_codo:
     with col_a:
         fig_codo = px.line(x=K_range, y=inercias, markers=True,
                            labels={"x": "K", "y": "Inercia (WCSS)"}, title="Método del Codo")
-        fig_codo.add_vline(x=K, line_dash="dash", line_color="red",
-                           annotation_text=f"K = {K}")
+        fig_codo.add_vline(x=K, line_dash="dash", line_color="red", annotation_text=f"K = {K}")
         st.plotly_chart(fig_codo, use_container_width=True)
     with col_b:
         fig_sil = px.line(x=K_range, y=silhouettes, markers=True,
                           labels={"x": "K", "y": "Silhouette Score"}, title="Silhouette por K")
-        fig_sil.add_vline(x=K, line_dash="dash", line_color="red",
-                          annotation_text=f"K = {K}")
+        fig_sil.add_vline(x=K, line_dash="dash", line_color="red", annotation_text=f"K = {K}")
         st.plotly_chart(fig_sil, use_container_width=True)
 
 if mostrar_metricas:
@@ -667,7 +700,6 @@ st.subheader("📋 Detalle de tiendas asignadas a cada cluster")
 df_descarga = df[["codigo_sucursal", "name_sucursal", "distrito",
                   "latitud", "longitud", "cluster"]].copy().sort_values(["cluster", "name_sucursal"])
 st.dataframe(df_descarga, use_container_width=True, height=400)
-
 csv = df_descarga.to_csv(index=False).encode("utf-8")
 st.download_button("⬇️ Descargar resultados (CSV)", data=csv,
     file_name=f"tiendas_agrupadas_K{K}.csv", mime="text/csv")
@@ -693,9 +725,6 @@ with col_n3:
         pred = knn_actual.predict(nueva_coord)[0]
         st.success(f"La nueva tienda pertenece al **Cluster {pred}**")
 
-# ===========================================================
-# FOOTER
-# ===========================================================
 st.markdown("---")
 st.caption(f"""
 Proyecto académico — Proceso de Aprendizaje 2 — ISIL
