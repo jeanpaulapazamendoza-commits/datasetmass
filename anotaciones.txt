@@ -1,12 +1,9 @@
 
 PROMPT : Desarrolla una aplicación web interactiva usando Python y Streamlit para agrupar ubicaciones geográficas de tiendas o puntos de venta utilizando coordenadas de latitud y longitud.
-
 La aplicación debe estar pensada como un proyecto universitario práctico y fácil de usar para usuarios sin conocimientos técnicos.
 
 Objetivo del proyecto
-
 Permitir que un usuario pueda:
-
 Subir un archivo CSV o Excel con coordenadas geográficas.
 O utilizar un dataset de ejemplo precargado o subirlo con la plantilla .
 Visualizar los puntos en un mapa interactivo.
