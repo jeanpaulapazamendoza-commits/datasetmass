@@ -1,12 +1,25 @@
-
-PROMPT : Desarrolla una aplicación web interactiva usando Python y Streamlit para agrupar ubicaciones geográficas de tiendas o puntos de venta utilizando coordenadas de latitud y longitud.
+Desarrolla una aplicación web interactiva usando Python y Streamlit para agrupar ubicaciones geográficas de tiendas o puntos de venta utilizando coordenadas de latitud y longitud.
 La aplicación debe estar pensada como un proyecto universitario práctico y fácil de usar para usuarios sin conocimientos técnicos.
 
 Objetivo del proyecto
-Permitir que un usuario pueda:
-Subir un archivo CSV o Excel con coordenadas geográficas.
+1. Permitir que un usuario pueda:
+2. Subir un archivo CSV o Excel con coordenadas geográficas.
 O utilizar un dataset de ejemplo precargado o subirlo con la plantilla .
-Visualizar los puntos en un mapa interactivo.
-Aplicar algoritmos de clustering para agrupar puntos geográficos automáticamente.
-Elegir la cantidad de grupos o clusters.
-Comparar diferentes algoritmos de agrupamiento.
+3. Visualizar los puntos en un mapa interactivo.
+4. Aplicar algoritmos de clustering para agrupar puntos geográficos automáticamente.
+5. Elegir la cantidad de grupos o clusters.
+6. Comparar diferentes algoritmos de agrupamiento.
+
+Notas: 
+1. En el slicer de CD colocar la latitud y Longitud del punto de partida de tus unidades de transporte
+2. Puedes seleccionar la cantidad de agrupaciones
+3. En la API Key de OpenRouteService puedes crearte una cuenta gratuita y obtener tu Key considera "El plan gratuito te da 500 requests de optimization/día y 2000 de directions/día, más que suficiente".
+
+Paso 1: Obtener API Key de OpenRouteService (gratis, 5 min)
+
+1.Entra a https://openrouteservice.org/dev/#/signup
+2. Crea una cuenta gratuita con tu correo.
+3. Confirma el email y entra al dashboard.
+4. Click en "Request a token" (Free plan).
+5. Selecciona el plan "Free" y crea un token.
+6. Copia el token (lo necesitarás en la app).
