@@ -1,3 +1,12 @@
+"""
+PA2 - Evaluación: Proceso de Aprendizaje 2
+Agrupación de tiendas por cercanía geográfica (KMeans + KNN)
+
+Autor:  Jean Paul Apaza Mendoza
+Código: ISIL 76274929@mail.isil.pe
+Curso:  Fundamentos de Machine Learning
+"""
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -21,6 +30,8 @@ st.set_page_config(
 # ===========================================================
 # DATOS PERSONALES Y ENLACES (REQUERIDO POR EL ENUNCIADO)
 # ===========================================================
+NOMBRE_ALUMNO = "Jean Paul Apaza mendoza"
+CODIGO_ISIL = "ISIL 76274929@mail.isil.pe"
 URL_COLAB = "https://colab.research.google.com/drive/1HRFy03Da-KP6zSfyX6XSwvqeqqeaDUPP?usp=sharing"
 
 # ===========================================================
@@ -43,6 +54,8 @@ def cargar_modelos():
 # ===========================================================
 st.title("🏪 Agrupación de Tiendas por Cercanía Geográfica")
 st.markdown(f"""
+**Alumno:** {NOMBRE_ALUMNO}
+**Código ISIL:** {CODIGO_ISIL}
 **Cuaderno de código (COLAB):** [Abrir en Google Colab]({URL_COLAB})
 """)
 
