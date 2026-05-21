@@ -32,6 +32,9 @@ NOMBRE_ALUMNO = "Jean Paul Apaza mendoza"
 CODIGO_ISIL = "ISIL 76274929@mail.isil.pe"
 URL_COLAB = "https://colab.research.google.com/drive/1HRFy03Da-KP6zSfyX6XSwvqeqqeaDUPP?usp=sharing"
 
+# Número máximo de clusters permitidos
+MAX_K = 30
+
 # ===========================================================
 # FUNCIONES PARA CARGAR DATOS Y MODELOS (con cache)
 # ===========================================================
@@ -91,7 +94,6 @@ except Exception as e:
 # ===========================================================
 st.sidebar.header("📂 Cargar tu propio dataset")
 
-# Sub-sección: descargar plantilla
 with st.sidebar.expander("📥 ¿No sabes cómo llenar los datos? Descarga la plantilla", expanded=False):
     st.caption("Descarga una plantilla con las columnas correctas y 3 filas de ejemplo. Edítala con tus propios datos y luego súbela abajo.")
 
@@ -125,7 +127,6 @@ with st.sidebar.expander("📥 ¿No sabes cómo llenar los datos? Descarga la pl
             use_container_width=True
         )
 
-# Sub-sección: subir archivo
 st.sidebar.caption("Sube un archivo Excel o CSV con tus tiendas:")
 
 archivo_subido = st.sidebar.file_uploader(
@@ -220,7 +221,7 @@ else:
 @st.cache_data
 def calcular_k_optimo(_X_scaled, dataset_id):
     sils = {}
-    max_k = min(11, len(_X_scaled))
+    max_k = min(MAX_K + 1, len(_X_scaled))
     for k in range(2, max_k):
         km = KMeans(n_clusters=k, random_state=42, n_init=10)
         labels = km.fit_predict(_X_scaled)
@@ -233,14 +234,14 @@ k_optimo, sil_dict = calcular_k_optimo(X_scaled, dataset_id)
 
 st.sidebar.info(f"💡 **K óptimo sugerido:** {k_optimo}\n\n(Silhouette = {sil_dict[k_optimo]:.3f})")
 
-max_k_slider = min(10, len(df) - 1)
+max_k_slider = min(MAX_K, len(df) - 1)
 k_usuario = st.sidebar.slider(
     "Selecciona el número de clusters (K):",
     min_value=2,
     max_value=max_k_slider,
     value=min(k_optimo, max_k_slider),
     step=1,
-    help="K es el número de zonas de despacho en las que quieres agrupar las tiendas."
+    help=f"K es el número de zonas de despacho. Máximo permitido: {MAX_K}."
 )
 
 usar_optimo = st.sidebar.checkbox("Usar K óptimo automático", value=False)
@@ -320,7 +321,7 @@ if mostrar_codo:
     st.subheader("📈 Selección del K óptimo")
     inercias = []
     silhouettes = []
-    max_k = min(11, len(df))
+    max_k = min(MAX_K + 1, len(df))
     K_range = list(range(2, max_k))
     for k in K_range:
         km_tmp = KMeans(n_clusters=k, random_state=42, n_init=10)
