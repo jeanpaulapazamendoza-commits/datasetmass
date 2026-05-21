@@ -43,8 +43,6 @@ def cargar_modelos():
 # ===========================================================
 st.title("🏪 Agrupación de Tiendas por Cercanía Geográfica")
 st.markdown(f"""
-**Alumno:** {NOMBRE_ALUMNO}
-**Código ISIL:** {CODIGO_ISIL}
 **Cuaderno de código (COLAB):** [Abrir en Google Colab]({URL_COLAB})
 """)
 
