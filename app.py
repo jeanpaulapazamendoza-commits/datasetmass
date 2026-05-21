@@ -271,4 +271,299 @@ mostrar_lineas = st.sidebar.checkbox("Mostrar líneas guía a centroides", value
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 Ver detalles")
 mostrar_codo = st.sidebar.checkbox("Mostrar método del codo / silhouette", value=True)
-mostrar_metricas = st.sidebar.checkbox("Most
+mostrar_metricas = st.sidebar.checkbox("Mostrar métricas del modelo", value=True)
+
+# ===========================================================
+# ENTRENAR EL MODELO
+# ===========================================================
+modelo = KMeans(n_clusters=K, random_state=42, n_init=10)
+df["cluster"] = modelo.fit_predict(X_scaled)
+df["cluster"] = df["cluster"].astype(str)
+
+centroides = scaler.inverse_transform(modelo.cluster_centers_)
+df_centroides = pd.DataFrame(centroides, columns=["latitud", "longitud"])
+df_centroides["cluster"] = [f"Centroide {i}" for i in range(K)]
+
+# ===========================================================
+# MÉTRICAS
+# ===========================================================
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Tiendas totales", len(df))
+col2.metric("Clusters formados", K)
+col3.metric("Silhouette Score", f"{silhouette_score(X_scaled, df['cluster']):.3f}")
+col4.metric("Davies-Bouldin", f"{davies_bouldin_score(X_scaled, df['cluster']):.3f}")
+st.markdown("---")
+
+# ===========================================================
+# MAPA INTERACTIVO PROFESIONAL
+# ===========================================================
+st.subheader(f"🗺️ Mapa interactivo — {K} zonas de despacho")
+
+# Centro y zoom automáticos
+center_lat = df["latitud"].mean()
+center_lon = df["longitud"].mean()
+lat_range = df["latitud"].max() - df["latitud"].min()
+lon_range = df["longitud"].max() - df["longitud"].min()
+max_range = max(lat_range, lon_range, 0.001)
+
+if max_range < 0.05:
+    zoom_calc = 13
+elif max_range < 0.1:
+    zoom_calc = 12
+elif max_range < 0.3:
+    zoom_calc = 11
+elif max_range < 1:
+    zoom_calc = 9
+elif max_range < 5:
+    zoom_calc = 6
+elif max_range < 20:
+    zoom_calc = 4
+else:
+    zoom_calc = 2
+
+paletas = {
+    "Vivid": px.colors.qualitative.Vivid,
+    "Bold": px.colors.qualitative.Bold,
+    "Pastel": px.colors.qualitative.Pastel,
+    "Plotly": px.colors.qualitative.Plotly,
+    "D3": px.colors.qualitative.D3,
+    "Light24": px.colors.qualitative.Light24
+}
+colores = paletas[paleta_colores]
+
+# Construir el mapa base
+fig_mapa = go.Figure()
+
+# 1) ZONAS DE COBERTURA (convex hull) — capa más al fondo
+if mostrar_zonas:
+    for i in range(K):
+        cluster_data = df[df["cluster"] == str(i)]
+        if len(cluster_data) >= 3:
+            puntos = cluster_data[["longitud", "latitud"]].values
+            try:
+                hull = ConvexHull(puntos)
+                hull_pts = puntos[hull.vertices]
+                hull_pts = np.vstack([hull_pts, hull_pts[0]])
+                color_cluster = colores[i % len(colores)]
+                fig_mapa.add_trace(go.Scattermapbox(
+                    lat=hull_pts[:, 1],
+                    lon=hull_pts[:, 0],
+                    mode="lines",
+                    fill="toself",
+                    fillcolor=hex_to_rgba(color_cluster, alpha=0.18),
+                    line=dict(color=color_cluster, width=2),
+                    name=f"Zona {i}",
+                    hoverinfo="skip",
+                    showlegend=False
+                ))
+            except Exception:
+                pass
+
+# 2) LÍNEAS GUÍA opcionales (capa intermedia)
+if mostrar_lineas:
+    for i in range(K):
+        cluster_data = df[df["cluster"] == str(i)]
+        cx = df_centroides["latitud"].iloc[i]
+        cy = df_centroides["longitud"].iloc[i]
+        color_cluster = colores[i % len(colores)]
+        lats = []
+        lons = []
+        for _, row in cluster_data.iterrows():
+            lats.extend([cx, row["latitud"], None])
+            lons.extend([cy, row["longitud"], None])
+        fig_mapa.add_trace(go.Scattermapbox(
+            lat=lats, lon=lons,
+            mode="lines",
+            line=dict(color=hex_to_rgba(color_cluster, alpha=0.35), width=1),
+            hoverinfo="skip",
+            showlegend=False
+        ))
+
+# 3) TIENDAS (coloreadas por cluster)
+for i in range(K):
+    cluster_data = df[df["cluster"] == str(i)]
+    color_cluster = colores[i % len(colores)]
+    fig_mapa.add_trace(go.Scattermapbox(
+        lat=cluster_data["latitud"],
+        lon=cluster_data["longitud"],
+        mode="markers",
+        marker=dict(size=12, color=color_cluster, opacity=0.95),
+        name=f"Cluster {i}",
+        text=cluster_data["name_sucursal"],
+        customdata=cluster_data[["codigo_sucursal", "distrito"]].values,
+        hovertemplate=(
+            "<b>%{text}</b><br>"
+            "Código: %{customdata[0]}<br>"
+            "Distrito: %{customdata[1]}<br>"
+            "Lat: %{lat:.5f}<br>"
+            "Lon: %{lon:.5f}<extra></extra>"
+        )
+    ))
+
+# 4) CENTROIDES (capa al frente) — efecto anillo: capa negra + capa blanca + número
+# Capa exterior negra (efecto anillo)
+fig_mapa.add_trace(go.Scattermapbox(
+    lat=df_centroides["latitud"],
+    lon=df_centroides["longitud"],
+    mode="markers",
+    marker=dict(size=22, color="#1a1a1a", opacity=1.0),
+    hoverinfo="skip",
+    showlegend=False
+))
+
+# Capa intermedia blanca
+fig_mapa.add_trace(go.Scattermapbox(
+    lat=df_centroides["latitud"],
+    lon=df_centroides["longitud"],
+    mode="markers+text",
+    marker=dict(size=18, color="white", opacity=1.0),
+    text=[str(i) for i in range(K)],
+    textfont=dict(size=11, color="#1a1a1a", family="Arial Black"),
+    textposition="middle center",
+    name="📍 Centroide",
+    hovertext=[
+        f"<b>Centroide del Cluster {i}</b><br>Lat: {df_centroides['latitud'].iloc[i]:.5f}<br>Lon: {df_centroides['longitud'].iloc[i]:.5f}"
+        for i in range(K)
+    ],
+    hoverinfo="text"
+))
+
+fig_mapa.update_layout(
+    mapbox=dict(
+        style=estilo_mapa,
+        center=dict(lat=center_lat, lon=center_lon),
+        zoom=zoom_calc
+    ),
+    height=680,
+    margin={"r": 0, "t": 10, "l": 0, "b": 0},
+    legend=dict(
+        title=dict(text="<b>Clusters</b>", font=dict(size=13, color="#222")),
+        yanchor="top",
+        y=0.99,
+        xanchor="left",
+        x=0.01,
+        bgcolor="rgba(255,255,255,0.95)",
+        bordercolor="#888",
+        borderwidth=1,
+        font=dict(size=11, color="#222"),
+        itemsizing="constant"
+    ),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial", bordercolor="#333")
+)
+
+st.plotly_chart(fig_mapa, use_container_width=True)
+
+st.caption(
+    "💡 Los **polígonos coloreados** son las zonas de cobertura (convex hull) de cada cluster. "
+    "Los **círculos blancos numerados** son los centroides geográficos. "
+    "Pasa el cursor sobre cualquier punto para ver el detalle."
+)
+
+# ===========================================================
+# TABLA RESUMEN POR CLUSTER
+# ===========================================================
+st.subheader("📊 Resumen por cluster")
+resumen = df.groupby("cluster").agg(
+    cantidad_tiendas=("codigo_sucursal", "count"),
+    lat_centro=("latitud", "mean"),
+    lon_centro=("longitud", "mean")
+).reset_index()
+st.dataframe(resumen, use_container_width=True)
+
+# ===========================================================
+# GRÁFICAS DEL CODO Y SILHOUETTE
+# ===========================================================
+if mostrar_codo:
+    st.subheader("📈 Selección del K óptimo")
+    inercias = []
+    silhouettes = []
+    max_k = min(MAX_K + 1, len(df))
+    K_range = list(range(2, max_k))
+    for k in K_range:
+        km_tmp = KMeans(n_clusters=k, random_state=42, n_init=10)
+        labels_tmp = km_tmp.fit_predict(X_scaled)
+        inercias.append(km_tmp.inertia_)
+        silhouettes.append(silhouette_score(X_scaled, labels_tmp))
+    col_a, col_b = st.columns(2)
+    with col_a:
+        fig_codo = px.line(x=K_range, y=inercias, markers=True,
+                           labels={"x": "K", "y": "Inercia (WCSS)"},
+                           title="Método del Codo")
+        fig_codo.add_vline(x=K, line_dash="dash", line_color="red",
+                           annotation_text=f"K = {K} (actual)")
+        st.plotly_chart(fig_codo, use_container_width=True)
+    with col_b:
+        fig_sil = px.line(x=K_range, y=silhouettes, markers=True,
+                          labels={"x": "K", "y": "Silhouette Score"},
+                          title="Silhouette Score por K")
+        fig_sil.add_vline(x=K, line_dash="dash", line_color="red",
+                          annotation_text=f"K = {K} (actual)")
+        st.plotly_chart(fig_sil, use_container_width=True)
+
+# ===========================================================
+# MÉTRICAS DETALLADAS
+# ===========================================================
+if mostrar_metricas:
+    st.subheader("📐 Interpretación de las métricas")
+    st.markdown("""
+    | Métrica | Valor actual | Interpretación |
+    |---|---|---|
+    | **Silhouette Score** | {:.3f} | Va de -1 a 1. Más cercano a 1 = clusters mejor separados. |
+    | **Davies-Bouldin Index** | {:.3f} | Cuanto **más bajo**, mejor (clusters compactos y separados). |
+    | **Inercia (WCSS)** | {:.4f} | Suma de distancias al centroide. Menor = clusters más densos. |
+    """.format(
+        silhouette_score(X_scaled, df["cluster"]),
+        davies_bouldin_score(X_scaled, df["cluster"]),
+        modelo.inertia_
+    ))
+
+# ===========================================================
+# DETALLE Y DESCARGA
+# ===========================================================
+st.markdown("---")
+st.subheader("📋 Detalle de tiendas asignadas a cada cluster")
+df_descarga = df[["codigo_sucursal", "name_sucursal", "distrito",
+                  "latitud", "longitud", "cluster"]].copy()
+df_descarga = df_descarga.sort_values(["cluster", "name_sucursal"])
+st.dataframe(df_descarga, use_container_width=True, height=400)
+
+csv = df_descarga.to_csv(index=False).encode("utf-8")
+st.download_button(
+    label="⬇️ Descargar resultados (CSV)",
+    data=csv,
+    file_name=f"tiendas_agrupadas_K{K}.csv",
+    mime="text/csv"
+)
+
+# ===========================================================
+# PREDICTOR DE NUEVA TIENDA
+# ===========================================================
+st.markdown("---")
+st.subheader("🆕 Predecir el cluster de una tienda NUEVA (modelo KNN)")
+st.caption("Ingresa las coordenadas y el clasificador KNN entrenado te dirá a qué grupo pertenece.")
+
+col_n1, col_n2, col_n3 = st.columns([1, 1, 1])
+with col_n1:
+    nueva_lat = st.number_input("Latitud", value=-12.18, format="%.6f")
+with col_n2:
+    nueva_lon = st.number_input("Longitud", value=-76.96, format="%.6f")
+with col_n3:
+    if st.button("🔍 Predecir cluster", use_container_width=True):
+        from sklearn.neighbors import KNeighborsClassifier
+        knn_actual = KNeighborsClassifier(n_neighbors=3)
+        knn_actual.fit(X_scaled, df["cluster"].astype(int))
+        nueva_coord = scaler.transform([[nueva_lat, nueva_lon]])
+        pred = knn_actual.predict(nueva_coord)[0]
+        st.success(f"La nueva tienda pertenece al **Cluster {pred}**")
+
+# ===========================================================
+# FOOTER
+# ===========================================================
+st.markdown("---")
+st.caption(f"""
+Proyecto académico — Proceso de Aprendizaje 2 — ISIL
+Modelos: KMeans (clustering) + KNN (clasificación supervisada) | Guardados en formato .pkl con joblib
+[Ver cuaderno de código (Google Colab)]({URL_COLAB})
+""")
