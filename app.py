@@ -143,7 +143,13 @@ st.sidebar.header("⚙️ Configuración")
 
 # Calcular K óptimo automáticamente
 X = df[["latitud", "longitud"]].values
-X_scaled = scaler.transform(X)
+
+# Si el usuario subió un archivo, recalcular el scaler con los nuevos datos
+if archivo_subido is not None:
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+else:
+    X_scaled = scaler.transform(X)
 
 @st.cache_data
 def calcular_k_optimo(_X_scaled):
@@ -213,7 +219,7 @@ fig_mapa = px.scatter_mapbox(
     hover_name="name_sucursal",
     hover_data={"codigo_sucursal": True, "distrito": True, "cluster": True,
                 "latitud": False, "longitud": False},
-    zoom=12,
+    zoom=11 if archivo_subido is None else 4,
     height=600,
     mapbox_style="open-street-map",
     color_discrete_sequence=px.colors.qualitative.Bold,
