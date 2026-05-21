@@ -1,12 +1,3 @@
-"""
-PA2 - Evaluación: Proceso de Aprendizaje 2
-Agrupación de tiendas por cercanía geográfica (KMeans + KNN)
-
-Autor:  [Tu Nombre]
-Código: [Tu Código ISIL]
-Curso:  Fundamentos de Machine Learning
-"""
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -30,9 +21,7 @@ st.set_page_config(
 # ===========================================================
 # DATOS PERSONALES Y ENLACES (REQUERIDO POR EL ENUNCIADO)
 # ===========================================================
-NOMBRE_ALUMNO = "TU NOMBRE COMPLETO AQUI"
-CODIGO_ISIL = "TU CODIGO ISIL AQUI"
-URL_COLAB = "https://colab.research.google.com/drive/TU_ID_DE_COLAB?usp=sharing"
+URL_COLAB = "https://colab.research.google.com/drive/1HRFy03Da-KP6zSfyX6XSwvqeqqeaDUPP?usp=sharing"
 
 # ===========================================================
 # CARGA DEL DATASET Y MODELOS
