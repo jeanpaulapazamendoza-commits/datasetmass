@@ -248,6 +248,27 @@ usar_optimo = st.sidebar.checkbox("Usar K óptimo automático", value=False)
 K = k_optimo if usar_optimo else k_usuario
 
 st.sidebar.markdown("---")
+st.sidebar.markdown("### 🎨 Estilo del mapa")
+estilo_mapa = st.sidebar.selectbox(
+    "Selecciona el estilo:",
+    options=["carto-positron", "open-street-map", "carto-darkmatter", "white-bg"],
+    format_func=lambda x: {
+        "carto-positron": "🌅 Claro (recomendado)",
+        "open-street-map": "🗺️ OpenStreetMap",
+        "carto-darkmatter": "🌃 Oscuro",
+        "white-bg": "⬜ Blanco minimalista"
+    }[x],
+    index=0
+)
+
+paleta_colores = st.sidebar.selectbox(
+    "Paleta de colores:",
+    options=["Vivid", "Bold", "Pastel", "Plotly", "D3", "Light24"],
+    index=0,
+    help="Cambia el esquema de colores de los clusters."
+)
+
+st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 Ver detalles")
 mostrar_codo = st.sidebar.checkbox("Mostrar método del codo / silhouette", value=True)
 mostrar_metricas = st.sidebar.checkbox("Mostrar métricas del modelo", value=True)
@@ -274,34 +295,117 @@ col4.metric("Davies-Bouldin", f"{davies_bouldin_score(X_scaled, df['cluster']):.
 st.markdown("---")
 
 # ===========================================================
-# MAPA INTERACTIVO
+# MAPA INTERACTIVO (MEJORADO)
 # ===========================================================
 st.subheader(f"🗺️ Mapa interactivo — {K} grupos de tiendas")
+
+# Calcular centro y zoom automáticamente según el rango de coordenadas
+center_lat = df["latitud"].mean()
+center_lon = df["longitud"].mean()
+lat_range = df["latitud"].max() - df["latitud"].min()
+lon_range = df["longitud"].max() - df["longitud"].min()
+max_range = max(lat_range, lon_range, 0.001)
+
+if max_range < 0.05:
+    zoom_calc = 13
+elif max_range < 0.1:
+    zoom_calc = 12
+elif max_range < 0.3:
+    zoom_calc = 11
+elif max_range < 1:
+    zoom_calc = 9
+elif max_range < 5:
+    zoom_calc = 6
+elif max_range < 20:
+    zoom_calc = 4
+else:
+    zoom_calc = 2
+
+# Obtener la paleta de colores elegida
+paletas = {
+    "Vivid": px.colors.qualitative.Vivid,
+    "Bold": px.colors.qualitative.Bold,
+    "Pastel": px.colors.qualitative.Pastel,
+    "Plotly": px.colors.qualitative.Plotly,
+    "D3": px.colors.qualitative.D3,
+    "Light24": px.colors.qualitative.Light24
+}
+colores = paletas[paleta_colores]
+
+# Construir el mapa
 fig_mapa = px.scatter_mapbox(
     df,
     lat="latitud",
     lon="longitud",
     color="cluster",
     hover_name="name_sucursal",
-    hover_data={"codigo_sucursal": True, "distrito": True, "cluster": True,
-                "latitud": False, "longitud": False},
-    zoom=11 if archivo_subido is None else 4,
-    height=600,
-    mapbox_style="open-street-map",
-    color_discrete_sequence=px.colors.qualitative.Bold,
-    title=f"Tiendas agrupadas en {K} zonas de despacho"
+    hover_data={
+        "codigo_sucursal": True,
+        "distrito": True,
+        "cluster": True,
+        "latitud": ":.5f",
+        "longitud": ":.5f"
+    },
+    zoom=zoom_calc,
+    center={"lat": center_lat, "lon": center_lon},
+    height=650,
+    mapbox_style=estilo_mapa,
+    color_discrete_sequence=colores,
+    title=None,
+    category_orders={"cluster": sorted(df["cluster"].unique(), key=lambda x: int(x))}
 )
+
+# Hacer los puntos de tiendas más grandes y con buena opacidad
+fig_mapa.update_traces(
+    marker=dict(size=13, opacity=0.85)
+)
+
+# Añadir centroides como marcadores blancos numerados
 fig_mapa.add_trace(go.Scattermapbox(
     lat=df_centroides["latitud"],
     lon=df_centroides["longitud"],
-    mode="markers",
-    marker=dict(size=18, color="black", symbol="circle"),
-    text=df_centroides["cluster"],
-    name="Centroides",
-    hoverinfo="text"
+    mode="markers+text",
+    marker=dict(
+        size=28,
+        color="white",
+        opacity=1.0
+    ),
+    text=[str(i) for i in range(K)],
+    textfont=dict(size=14, color="black", family="Arial Black"),
+    textposition="middle center",
+    name="⭐ Centroide",
+    hovertext=[f"Centro del Cluster {i}<br>Lat: {df_centroides['latitud'].iloc[i]:.5f}<br>Lon: {df_centroides['longitud'].iloc[i]:.5f}" for i in range(K)],
+    hoverinfo="text",
+    showlegend=True
 ))
-fig_mapa.update_layout(margin={"r":0, "t":40, "l":0, "b":0})
+
+# Ajustar layout
+fig_mapa.update_layout(
+    margin={"r": 0, "t": 10, "l": 0, "b": 0},
+    legend=dict(
+        title=dict(text="<b>Clusters</b>", font=dict(size=13)),
+        yanchor="top",
+        y=0.98,
+        xanchor="left",
+        x=0.01,
+        bgcolor="rgba(255,255,255,0.92)",
+        bordercolor="#444",
+        borderwidth=1,
+        font=dict(size=11)
+    ),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    hoverlabel=dict(
+        bgcolor="white",
+        font_size=13,
+        font_family="Arial",
+        bordercolor="#333"
+    )
+)
+
 st.plotly_chart(fig_mapa, use_container_width=True)
+
+st.caption("💡 Cada **número en círculo blanco** representa el centroide (centro geográfico) de un cluster. Pasa el cursor sobre los puntos para ver el detalle de cada tienda.")
 
 # ===========================================================
 # TABLA RESUMEN POR CLUSTER
