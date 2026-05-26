@@ -172,8 +172,8 @@ st.sidebar.markdown("---")
 # ===========================================================
 st.title("🏪 Agrupación de Tiendas y Ruteo Óptimo de Despacho")
 st.markdown(f"""
-**Alumno:** {NOMBRE_ALUMNO}
-**Código ISIL:** {CODIGO_ISIL}
+**Autor:** {NOMBRE_ALUMNO}
+**Correo:** {CODIGO_ISIL}
 **Cuaderno de código (COLAB):** [Abrir en Google Colab]({URL_COLAB})
 """)
 st.markdown("---")
