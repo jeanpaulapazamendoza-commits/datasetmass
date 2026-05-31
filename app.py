@@ -1,8 +1,8 @@
 """
-PA2 - Evaluación: Proceso de Aprendizaje 2
+Proceso de Optimización
 Agrupación de tiendas por cercanía geográfica (KMeans + KNN) + Ruteo óptimo
 Autor:  Jean Paul Apaza Mendoza
-Código: ISIL 76274929@mail.isil.pe
+Código: Gmail cuenta.appseet01@gmail.com
 Curso:  Fundamentos de Machine Learning
 """
 import streamlit as st
@@ -26,7 +26,7 @@ st.set_page_config(
 )
 
 NOMBRE_ALUMNO = "Jean Paul Apaza mendoza"
-CODIGO_ISIL = "ISIL 76274929@mail.isil.pe"
+CODIGO_ISIL = "cuenta.appseet01@gmail.com"
 URL_COLAB = "https://colab.research.google.com/drive/1HRFy03Da-KP6zSfyX6XSwvqeqqeaDUPP?usp=sharing"
 MAX_K = 30
 
